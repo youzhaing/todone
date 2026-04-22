@@ -95,10 +95,24 @@ td summary                  写今日总结模板 + 打印参考信息
 
 典型用法：把你的数据目录（存放 todo.md / done.md 等）设成一个私有 git 仓库，备份到 GitHub，自己无感同步。
 
+## AI 集成（可选）
+
+如果你用 [Cursor](https://cursor.com)，可以装一个 skill 让 AI 帮你写日报：
+
+```bash
+mkdir -p ~/.cursor/skills
+cp -r integrations/cursor/skills/daily-summary ~/.cursor/skills/
+```
+
+之后在 Cursor chat 里说 "日报 / 总结今天 / summary"，AI 会自动跑 `td summary` 拉取当天素材，写一段三行总结到 `done.md`，并把"明天继续"加进 `todo.md`。
+
+详细玩法见 [`integrations/cursor/skills/daily-summary/README.md`](./integrations/cursor/skills/daily-summary/README.md)。
+
 ## 实现状态
 
 - ✅ Python（`python/td.py`）— 参考实现
 - ✅ JavaScript / Node（`js/td.js`）— 对齐 Python 行为
+- ✅ Cursor skill — `daily-summary` 让 AI 帮你写每日复盘
 - 欢迎 PR 其它语言（Go、Rust、Bash……），只要遵循 [SPEC.md](./SPEC.md)
 
 ## License
