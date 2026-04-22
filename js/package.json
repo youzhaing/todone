@@ -1,0 +1,20 @@
+{
+  "name": "todone",
+  "version": "0.1.0",
+  "description": "Minimalist todo + done log CLI (JS implementation). Shares plain-markdown data format with the Python version.",
+  "bin": {
+    "td": "./td.js"
+  },
+  "main": "td.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "keywords": [
+    "todo",
+    "cli",
+    "markdown",
+    "productivity",
+    "daily-log"
+  ]
+}

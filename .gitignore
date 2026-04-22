@@ -1,0 +1,30 @@
+# 运行态 / 数据文件（任意位置都挡）
+**/.recurring_state.json
+**/todo.md
+**/done.md
+**/recurring.md
+
+# 但放行模板
+!template/todo.md
+!template/done.md
+!template/recurring.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# macOS / 编辑器
+.DS_Store
+.vscode/
+.idea/
+
+# 备份
+*.bak
+*.backup.*
