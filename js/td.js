@@ -186,28 +186,50 @@ function cmdRm(arg) {
 
 // ---------- done.md 读写 ----------
 
+const DONE_HEADING_RE = /^## (\d{4}-\d{2}-\d{2})\b.*$/gm;
+
+function splitDoneSections(raw) {
+  const matches = [];
+  let m;
+  const re = new RegExp(DONE_HEADING_RE.source, DONE_HEADING_RE.flags);
+  while ((m = re.exec(raw)) !== null) {
+    matches.push({ start: m.index, date: m[1] });
+  }
+  if (matches.length === 0) return { prologue: raw, sections: [] };
+  const prologue = raw.slice(0, matches[0].start);
+  const sections = [];
+  for (let i = 0; i < matches.length; i++) {
+    const s = matches[i].start;
+    const e = i + 1 < matches.length ? matches[i + 1].start : raw.length;
+    sections.push(raw.slice(s, e));
+  }
+  return { prologue, sections };
+}
+
+function sectionDateKey(sec) {
+  const m = sec.match(/^## (\d{4}-\d{2}-\d{2})\b/);
+  return m ? m[1] : '';
+}
+
+function writeDone(prologue, sections) {
+  const sorted = sections.slice().sort((a, b) => {
+    const ka = sectionDateKey(a);
+    const kb = sectionDateKey(b);
+    if (!ka && kb) return 1;
+    if (ka && !kb) return -1;
+    return kb.localeCompare(ka);
+  });
+  const parts = [];
+  const trimmedProl = prologue.trim();
+  if (trimmedProl) parts.push(trimmedProl);
+  sorted.forEach((s) => parts.push(s.trim()));
+  fs.writeFileSync(DONE_FILE, parts.join('\n\n') + '\n', 'utf-8');
+}
+
 function appendToDoneToday(text) {
   ensureFile(DONE_FILE, '');
   const raw = fs.readFileSync(DONE_FILE, 'utf-8');
-  const headingRe = /^## (\d{4}-\d{2}-\d{2})\b.*$/gm;
-  const matches = [];
-  let m;
-  while ((m = headingRe.exec(raw)) !== null) {
-    matches.push({ start: m.index, date: m[1] });
-  }
-
-  let prologue;
-  const sections = [];
-  if (matches.length > 0) {
-    prologue = raw.slice(0, matches[0].start);
-    for (let i = 0; i < matches.length; i++) {
-      const s = matches[i].start;
-      const e = i + 1 < matches.length ? matches[i + 1].start : raw.length;
-      sections.push(raw.slice(s, e));
-    }
-  } else {
-    prologue = raw;
-  }
+  const { prologue, sections } = splitDoneSections(raw);
 
   const td = todayDate();
   const newLine = `- ${text}`;
@@ -231,14 +253,10 @@ function appendToDoneToday(text) {
   }
 
   if (!merged) {
-    sections.unshift(`${todayHeading()}\n\n${newLine}`);
+    sections.push(`${todayHeading()}\n\n${newLine}`);
   }
 
-  const parts = [];
-  const trimmedProl = prologue.trim();
-  if (trimmedProl) parts.push(trimmedProl);
-  sections.forEach((s) => parts.push(s.trim()));
-  fs.writeFileSync(DONE_FILE, parts.join('\n\n') + '\n', 'utf-8');
+  writeDone(prologue, sections);
 }
 
 function todayDoneItems() {
@@ -476,35 +494,25 @@ function collectContext() {
 function cmdSummary() {
   ensureFile(DONE_FILE, '');
   const raw = fs.readFileSync(DONE_FILE, 'utf-8');
-  const headingRe = /^## (\d{4}-\d{2}-\d{2})\b.*$/gm;
-  const matches = [];
-  let m;
-  while ((m = headingRe.exec(raw)) !== null) {
-    matches.push({ start: m.index, date: m[1] });
-  }
+  const { prologue, sections } = splitDoneSections(raw);
+
   const td = todayDate();
-  const todayIdx = matches.findIndex((x) => x.date === td);
+  const todayIdx = sections.findIndex((sec) => sec.startsWith(`## ${td}`));
 
   let inserted = false;
   if (todayIdx === -1) {
-    const prol = raw.replace(/\s+$/, '');
-    const parts = [];
-    if (prol) parts.push(prol);
-    parts.push(`${todayHeading()}\n\n${SUMMARY_TEMPLATE.join('\n')}`);
-    fs.writeFileSync(DONE_FILE, parts.join('\n\n') + '\n', 'utf-8');
+    sections.push(`${todayHeading()}\n\n${SUMMARY_TEMPLATE.join('\n')}`);
     inserted = true;
   } else {
-    const start = matches[todayIdx].start;
-    const end =
-      todayIdx + 1 < matches.length ? matches[todayIdx + 1].start : raw.length;
-    const section = raw.slice(start, end);
-    if (!section.includes(SUMMARY_HEADING)) {
-      const newSec =
-        section.replace(/\s+$/, '') + '\n\n' + SUMMARY_TEMPLATE.join('\n') + '\n';
-      fs.writeFileSync(DONE_FILE, raw.slice(0, start) + newSec + raw.slice(end), 'utf-8');
+    const sec = sections[todayIdx];
+    if (!sec.includes(SUMMARY_HEADING)) {
+      sections[todayIdx] =
+        sec.replace(/\s+$/, '') + '\n\n' + SUMMARY_TEMPLATE.join('\n') + '\n';
       inserted = true;
     }
   }
+
+  writeDone(prologue, sections);
 
   if (inserted) console.log(`[td] 已追加总结模板。文件: ${DONE_FILE}`);
   else console.log(`[td] 今天段已有总结模板，本次未改动。文件: ${DONE_FILE}`);

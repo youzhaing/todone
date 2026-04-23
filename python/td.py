@@ -166,22 +166,44 @@ def cmd_rm(arg: str) -> None:
     print(f"[td] 已删除: {text}")
 
 
+_DONE_HEADING_RE = re.compile(r"(?m)^## (\d{4}-\d{2}-\d{2})\b.*$")
+
+
+def _split_done_sections(raw: str) -> tuple[str, list[str]]:
+    m_list = list(_DONE_HEADING_RE.finditer(raw))
+    if not m_list:
+        return raw, []
+    prologue = raw[: m_list[0].start()]
+    sections = [
+        raw[mm.start() : (m_list[i + 1].start() if i + 1 < len(m_list) else len(raw))]
+        for i, mm in enumerate(m_list)
+    ]
+    return prologue, sections
+
+
+def _section_date_key(sec: str) -> tuple[int, str]:
+    """取日期作为降序 key；无法解析的段落沉到最底。"""
+    m = _DONE_HEADING_RE.match(sec)
+    if not m:
+        return (0, "")
+    return (1, m.group(1))
+
+
+def _write_done(prologue: str, sections: list[str]) -> None:
+    sections = sorted(sections, key=_section_date_key, reverse=True)
+    parts: list[str] = []
+    prologue = prologue.strip()
+    if prologue:
+        parts.append(prologue)
+    parts.extend(sec.strip() for sec in sections)
+    DONE_FILE.write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+
+
 def append_to_done_today(text: str) -> None:
     ensure_file(DONE_FILE, "")
     raw = DONE_FILE.read_text(encoding="utf-8")
 
-    heading_re = re.compile(r"(?m)^## (\d{4}-\d{2}-\d{2})\b.*$")
-    m_list = list(heading_re.finditer(raw))
-
-    if m_list:
-        prologue = raw[: m_list[0].start()]
-        sections = [
-            raw[mm.start() : (m_list[i + 1].start() if i + 1 < len(m_list) else len(raw))]
-            for i, mm in enumerate(m_list)
-        ]
-    else:
-        prologue = raw
-        sections = []
+    prologue, sections = _split_done_sections(raw)
 
     td = today_date()
     new_line = f"- {text}"
@@ -199,14 +221,9 @@ def append_to_done_today(text: str) -> None:
             break
 
     if not merged:
-        sections.insert(0, today_heading() + "\n\n" + new_line)
+        sections.append(today_heading() + "\n\n" + new_line)
 
-    parts = []
-    prologue = prologue.strip()
-    if prologue:
-        parts.append(prologue)
-    parts.extend(sec.strip() for sec in sections)
-    DONE_FILE.write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+    _write_done(prologue, sections)
 
 
 def today_done_items() -> list[str]:
@@ -433,36 +450,29 @@ def collect_context() -> str:
 def cmd_summary() -> None:
     ensure_file(DONE_FILE, "")
     raw = DONE_FILE.read_text(encoding="utf-8")
-
-    heading_re = re.compile(r"(?m)^## (\d{4}-\d{2}-\d{2})\b.*$")
-    m_list = list(heading_re.finditer(raw))
+    prologue, sections = _split_done_sections(raw)
 
     td = today_date()
-    today_idx = next((i for i, mm in enumerate(m_list) if mm.group(1) == td), None)
+    today_idx = next(
+        (i for i, sec in enumerate(sections) if sec.startswith(f"## {td}")),
+        None,
+    )
 
     template_inserted = False
     if today_idx is None:
-        prologue = raw.rstrip()
-        parts = [prologue] if prologue else []
-        parts.append(today_heading() + "\n\n" + "\n".join(SUMMARY_TEMPLATE))
-        DONE_FILE.write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+        sections.append(today_heading() + "\n\n" + "\n".join(SUMMARY_TEMPLATE))
         template_inserted = True
     else:
-        start = m_list[today_idx].start()
-        end = (
-            m_list[today_idx + 1].start()
-            if today_idx + 1 < len(m_list)
-            else len(raw)
-        )
-        section = raw[start:end]
-        if SUMMARY_HEADING not in section:
-            new_section = section.rstrip() + "\n\n" + "\n".join(SUMMARY_TEMPLATE) + "\n"
-            DONE_FILE.write_text(raw[:start] + new_section + raw[end:], encoding="utf-8")
+        sec = sections[today_idx]
+        if SUMMARY_HEADING not in sec:
+            sections[today_idx] = sec.rstrip() + "\n\n" + "\n".join(SUMMARY_TEMPLATE) + "\n"
             template_inserted = True
 
     if template_inserted:
+        _write_done(prologue, sections)
         print(f"[td] 已追加总结模板。文件: {DONE_FILE}")
     else:
+        _write_done(prologue, sections)
         print(f"[td] 今天段已有总结模板，本次未改动。文件: {DONE_FILE}")
 
     print()
